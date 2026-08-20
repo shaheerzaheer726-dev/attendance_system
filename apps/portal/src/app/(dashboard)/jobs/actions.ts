@@ -82,7 +82,8 @@ export async function setJobPostingStatus(formData: FormData) {
   if (
     !job ||
     (job.status === "DRAFT" && status !== "OPEN") ||
-    (job.status !== "DRAFT" && status === "OPEN")
+    (job.status === "OPEN" && status !== "CLOSED") ||
+    (job.status === "CLOSED" && status !== "OPEN")
   )
     return;
 

@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { deleteJobPosting, setJobPostingStatus } from "../actions";
+import { setJobPostingStatus } from "../actions";
+import { DeleteJobPostingForm } from "./delete-job-posting-form";
 import type { getJobPostings } from "../queries";
 
 type Job = Awaited<ReturnType<typeof getJobPostings>>[number];
@@ -25,33 +26,16 @@ function JobActions({ job, isHr }: { job: Job; isHr: boolean }) {
           </Link>
           <form action={setJobPostingStatus} style={{ display: "flex" }}>
             <input type="hidden" name="id" value={job.id} />
-            <input type="hidden" name="status" value={job.status === "DRAFT" ? "OPEN" : "CLOSED"} />
+            <input type="hidden" name="status" value={job.status === "OPEN" ? "CLOSED" : "OPEN"} />
             <button type="submit" className="back-link" style={actionStyle}>
-              {job.status === "DRAFT" ? "Publish posting" : "Close posting"}
+              {job.status === "DRAFT"
+                ? "Publish posting"
+                : job.status === "OPEN"
+                  ? "Close posting"
+                  : "Reopen posting"}
             </button>
           </form>
-          <form
-            action={deleteJobPosting}
-            style={{ display: "flex" }}
-            onSubmit={(event) => {
-              if (!window.confirm("Delete this job posting and all of its applications?")) {
-                event.preventDefault();
-              }
-            }}
-          >
-            <input type="hidden" name="id" value={job.id} />
-            <button
-              type="submit"
-              className="back-link"
-              style={{
-                ...actionStyle,
-                color: "#f87171",
-                borderColor: "rgba(248, 113, 113, 0.4)"
-              }}
-            >
-              Delete
-            </button>
-          </form>
+          <DeleteJobPostingForm jobId={job.id} style={actionStyle} />
         </>
       )}
     </div>

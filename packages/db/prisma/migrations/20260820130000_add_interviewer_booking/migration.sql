@@ -19,8 +19,15 @@ CREATE INDEX "InterviewerBooking_stepResponseId_idx" ON "InterviewerBooking"("st
 -- Create index for interviewerId + scheduledAt (for booking lookups)
 CREATE INDEX "InterviewerBooking_interviewerId_scheduledAt_idx" ON "InterviewerBooking"("interviewerId", "scheduledAt");
 
--- Drop the problematic unique constraint from JobApplicationStepResponse
-ALTER TABLE "JobApplicationStepResponse" DROP CONSTRAINT "JobApplicationStepResponse_interviewerId_scheduledAt_key";
+-- Drop the problematic unique index from JobApplicationStepResponse
+DROP INDEX "JobApplicationStepResponse_interviewerId_scheduledAt_key";
+
+-- Backfill existing interviewer bookings before dropping the legacy columns
+INSERT INTO "InterviewerBooking" ("id", "stepResponseId", "interviewerId", "scheduledAt", "createdAt", "updatedAt")
+SELECT gen_random_uuid()::text, "id", "interviewerId", "scheduledAt", CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+FROM "JobApplicationStepResponse"
+WHERE "interviewerId" IS NOT NULL AND "scheduledAt" IS NOT NULL
+ON CONFLICT ("interviewerId", "scheduledAt") DO NOTHING;
 
 -- Remove the interviewerId column from JobApplicationStepResponse
 ALTER TABLE "JobApplicationStepResponse" DROP COLUMN "interviewerId";

@@ -155,7 +155,7 @@ export async function addJobStep(
     }
 
     const activeInterviewers = await db.employment.findMany({
-      where: { id: { in: interviewerIds }, status: "ACTIVE" },
+      where: { id: { in: interviewerIds }, status: "ACTIVE", organizationId: user!.organizationId },
       select: { id: true }
     });
     if (activeInterviewers.length !== interviewerIds.length) {
