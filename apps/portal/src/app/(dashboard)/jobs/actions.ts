@@ -76,7 +76,7 @@ export async function setJobPostingStatus(formData: FormData) {
   }
 
   const job = await db.jobPosting.findFirst({
-    where: { id, organizationId: user.organizationId },
+    where: { id, organizationId: user!.organizationId },
     select: { status: true }
   });
   if (
@@ -87,7 +87,7 @@ export async function setJobPostingStatus(formData: FormData) {
     return;
 
   await db.jobPosting.updateMany({
-    where: { id, organizationId: user.organizationId, status: job.status },
+    where: { id, organizationId: user!.organizationId, status: job.status },
     data: { status }
   });
 

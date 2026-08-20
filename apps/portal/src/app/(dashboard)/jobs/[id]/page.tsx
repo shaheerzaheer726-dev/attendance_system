@@ -27,7 +27,7 @@ function JobDescription({
   createdAt: Date;
   creatorName: string;
   description: string;
-  status: "OPEN" | "CLOSED";
+  status: "DRAFT" | "OPEN" | "CLOSED";
 }) {
   const statusStyle =
     status === "OPEN"
@@ -152,7 +152,7 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
         <ApplyForm jobPostingId={job.id} steps={applicationSteps} />
       ) : (
         <section className="panel" style={{ cursor: "default" }}>
-          <p className="muted">This position is closed and is no longer accepting applications.</p>
+          <p className="muted">This position is not currently accepting applications.</p>
         </section>
       )}
     </main>
