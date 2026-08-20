@@ -167,6 +167,7 @@ enum ReportExportStatus {
 }
 
 enum JobPostingStatus {
+  DRAFT
   OPEN
   CLOSED
 }
@@ -311,6 +312,7 @@ model Employment {
   authoredNotes             EmployeeNote[]            @relation("NoteAuthor")
   receivedEvaluations       PerformanceEvaluation[]   @relation("PerformanceTargetEmployee")
   submittedEvaluations      PerformanceEvaluation[]   @relation("PerformanceEvaluator")
+  interviewerBookings       InterviewerBooking[]
 
   @@unique([organizationId, employeeCode])
   @@index([membershipId, status])
@@ -715,7 +717,7 @@ model JobPosting {
   location       String?
   employmentType String?
   description    String
-  status         JobPostingStatus @default(OPEN)
+  status         JobPostingStatus @default(DRAFT)
   createdById    String
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
@@ -817,17 +819,31 @@ model JobApplicationStepResponse {
   answer        Json?
 
   // Interview-specific fields (only set when type = INTERVIEW)
-  interviewerId String?
   scheduledAt   DateTime?
 
   createdAt DateTime @default(now())
 
-  application JobApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
-  step        JobPostingStep @relation(fields: [stepId], references: [id], onDelete: Cascade)
+  application       JobApplication       @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  step              JobPostingStep        @relation(fields: [stepId], references: [id], onDelete: Cascade)
+  interviewBookings InterviewerBooking[]
 
   @@unique([applicationId, stepId])
-  @@unique([interviewerId, scheduledAt])
   @@index([stepId, scheduledAt])
+}
+
+model InterviewerBooking {
+  id                String                    @id @default(cuid())
+  stepResponseId    String
+  interviewerId     String
+  scheduledAt       DateTime
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+  stepResponse      JobApplicationStepResponse @relation(fields: [stepResponseId], references: [id], onDelete: Cascade)
+  interviewer       Employment                @relation(fields: [interviewerId], references: [id], onDelete: Restrict)
+
+  @@unique([interviewerId, scheduledAt])
+  @@index([stepResponseId])
+  @@index([interviewerId, scheduledAt])
 }
 
 model LeaveTypeConfig {

@@ -4,10 +4,10 @@ import type { InterviewStepConfig } from "../../step-types";
 
 const db = createPrismaClient(process.env.DATABASE_URL as string);
 
-export async function getJobStepsData(id: string) {
+export async function getJobStepsData(id: string, organizationId: string) {
   const [job, employmentRecords] = await Promise.all([
-    db.jobPosting.findUnique({
-      where: { id },
+    db.jobPosting.findFirst({
+      where: { id, organizationId },
       include: {
         steps: {
           orderBy: { order: "asc" },
@@ -16,7 +16,7 @@ export async function getJobStepsData(id: string) {
       }
     }),
     db.employment.findMany({
-      where: { status: "ACTIVE" },
+      where: { organizationId, status: "ACTIVE" },
       include: employmentIdentityInclude,
       orderBy: { employeeCode: "asc" }
     })

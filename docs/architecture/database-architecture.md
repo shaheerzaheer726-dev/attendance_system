@@ -175,8 +175,16 @@ approves a request must do so atomically.
 
 `JobPostingStep.config` and `JobApplicationStepResponse.answer` are JSON because step definitions
 vary by type. Their shape must be validated at the application boundary and documented next to
-the owning feature. `JobApplication.cvFileData` stores uploaded CV bytes in PostgreSQL; changes to
-file size, retention, or external storage are architectural changes.
+the owning feature. Job postings are mutable only while in `DRAFT`; publishing changes the status
+to `OPEN` and freezes the posting and its step definitions so stored application responses retain
+the definition they were submitted against.
+
+Multiple interviewers per step are supported through `JobPostingStep.config.interviewerIds`. When
+a candidate schedules an interview, a `JobApplicationStepResponse` is created for the scheduled
+time, and `InterviewerBooking` records are created for each interviewer to prevent double-booking.
+Availability checks verify that all scheduled interviewers are free. `JobApplication.cvFileData`
+stores uploaded CV bytes in PostgreSQL; changes to file size, retention, or external storage are
+architectural changes.
 
 ### Performance
 

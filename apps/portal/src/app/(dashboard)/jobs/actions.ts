@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { isHr } from "./permissions";
 import type { ApplicationState, JobPostingState } from "./types";
+import type { InterviewStepConfig } from "./step-types";
 
 const db = createPrismaClient(process.env.DATABASE_URL as string);
 
@@ -74,8 +75,19 @@ export async function setJobPostingStatus(formData: FormData) {
     return;
   }
 
-  await db.jobPosting.update({
-    where: { id, organizationId: user!.organizationId },
+  const job = await db.jobPosting.findFirst({
+    where: { id, organizationId: user.organizationId },
+    select: { status: true }
+  });
+  if (
+    !job ||
+    (job.status === "DRAFT" && status !== "OPEN") ||
+    (job.status !== "DRAFT" && status === "OPEN")
+  )
+    return;
+
+  await db.jobPosting.updateMany({
+    where: { id, organizationId: user.organizationId, status: job.status },
     data: { status }
   });
 
@@ -98,6 +110,14 @@ export async function deleteJobPosting(formData: FormData) {
 
   revalidatePath("/jobs");
 }
+
+type StepResponse = {
+  stepId: string;
+  type: "EMAIL_CV" | "QUESTIONNAIRE" | "INTERVIEW";
+  answer?: object;
+  interviewerIds?: string[];
+  scheduledAt?: Date;
+};
 
 export async function submitApplication(
   prevState: ApplicationState,
@@ -151,13 +171,7 @@ export async function submitApplication(
   }
 
   // Validate and build a response row for every step attached to this job.
-  const stepResponses: {
-    stepId: string;
-    type: "EMAIL_CV" | "QUESTIONNAIRE" | "INTERVIEW";
-    answer?: object;
-    interviewerId?: string;
-    scheduledAt?: Date;
-  }[] = [];
+  const stepResponses: StepResponse[] = [];
 
   for (const step of job.steps) {
     if (step.type === "EMAIL_CV") {
@@ -199,10 +213,18 @@ export async function submitApplication(
         return { error: "Please choose a valid interview date and time." };
       }
 
+      // Get all interviewers from step config
+      const config = step.config as InterviewStepConfig | null;
+      const interviewerIds = config?.interviewerIds?.length
+        ? config.interviewerIds
+        : step.interviewerId
+          ? [step.interviewerId]
+          : [];
+
       stepResponses.push({
         stepId: step.id,
         type: "INTERVIEW",
-        interviewerId: step.interviewerId ?? undefined,
+        interviewerIds,
         scheduledAt
       });
     }
@@ -226,16 +248,28 @@ export async function submitApplication(
       });
 
       for (const response of stepResponses) {
-        await tx.jobApplicationStepResponse.create({
+        const stepResponse = await tx.jobApplicationStepResponse.create({
           data: {
             applicationId: application.id,
             stepId: response.stepId,
             type: response.type,
             answer: response.answer ? JSON.parse(JSON.stringify(response.answer)) : undefined,
-            interviewerId: response.interviewerId,
             scheduledAt: response.scheduledAt
           }
         });
+
+        // Create interviewer booking records for each interviewer
+        if (response.type === "INTERVIEW" && response.interviewerIds && response.scheduledAt) {
+          for (const interviewerId of response.interviewerIds) {
+            await tx.interviewerBooking.create({
+              data: {
+                stepResponseId: stepResponse.id,
+                interviewerId,
+                scheduledAt: response.scheduledAt
+              }
+            });
+          }
+        }
       }
     });
   } catch (err: unknown) {
@@ -243,7 +277,7 @@ export async function submitApplication(
     if (code === "P2002") {
       return {
         error:
-          "One of the interview slots you selected was just booked by someone else. Please go back and choose a different time."
+          "One or more interviewers are no longer available at that time. Please go back and choose a different time."
       };
     }
     return { error: "Something went wrong while submitting your application. Please try again." };

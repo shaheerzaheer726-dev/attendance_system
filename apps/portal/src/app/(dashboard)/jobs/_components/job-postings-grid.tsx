@@ -25,12 +25,20 @@ function JobActions({ job, isHr }: { job: Job; isHr: boolean }) {
           </Link>
           <form action={setJobPostingStatus} style={{ display: "flex" }}>
             <input type="hidden" name="id" value={job.id} />
-            <input type="hidden" name="status" value={job.status === "OPEN" ? "CLOSED" : "OPEN"} />
+            <input type="hidden" name="status" value={job.status === "DRAFT" ? "OPEN" : "CLOSED"} />
             <button type="submit" className="back-link" style={actionStyle}>
-              {job.status === "OPEN" ? "Close posting" : "Reopen posting"}
+              {job.status === "DRAFT" ? "Publish posting" : "Close posting"}
             </button>
           </form>
-          <form action={deleteJobPosting} style={{ display: "flex" }}>
+          <form
+            action={deleteJobPosting}
+            style={{ display: "flex" }}
+            onSubmit={(event) => {
+              if (!window.confirm("Delete this job posting and all of its applications?")) {
+                event.preventDefault();
+              }
+            }}
+          >
             <input type="hidden" name="id" value={job.id} />
             <button
               type="submit"

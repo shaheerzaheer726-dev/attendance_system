@@ -50,11 +50,13 @@ function stepSummary(step: Step): string {
 export function JobStepsList({
   jobId,
   steps,
-  employees
+  employees,
+  editable
 }: {
   jobId: string;
   steps: Step[];
   employees: { id: string; fullName: string }[];
+  editable: boolean;
 }) {
   const [editingStepId, setEditingStepId] = useState<string | null>(null);
 
@@ -72,22 +74,24 @@ export function JobStepsList({
                 </span>
                 <p>{stepSummary(step)}</p>
               </div>
-              <div style={{ display: "flex", gap: "8px" }}>
-                <button
-                  type="button"
-                  className="back-link"
-                  onClick={() => setEditingStepId(step.id)}
-                >
-                  Edit
-                </button>
-                <form action={deleteJobStep}>
-                  <input type="hidden" name="stepId" value={step.id} />
-                  <input type="hidden" name="jobPostingId" value={jobId} />
-                  <button type="submit" className="back-link">
-                    Remove
+              {editable && (
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <button
+                    type="button"
+                    className="back-link"
+                    onClick={() => setEditingStepId(step.id)}
+                  >
+                    Edit
                   </button>
-                </form>
-              </div>
+                  <form action={deleteJobStep}>
+                    <input type="hidden" name="stepId" value={step.id} />
+                    <input type="hidden" name="jobPostingId" value={jobId} />
+                    <button type="submit" className="back-link">
+                      Remove
+                    </button>
+                  </form>
+                </div>
+              )}
             </div>
           </article>
         ))}

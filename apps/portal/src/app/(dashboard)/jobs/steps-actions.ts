@@ -64,9 +64,15 @@ export async function addJobStep(
     return { error: "Missing job posting reference." };
   }
 
-  const job = await db.jobPosting.findUnique({ where: { id: jobPostingId } });
+  const job = await db.jobPosting.findFirst({
+    where: { id: jobPostingId, organizationId: user!.organizationId },
+    select: { status: true }
+  });
   if (!job) {
     return { error: "This job posting no longer exists." };
+  }
+  if (job.status !== "DRAFT") {
+    return { error: "Published job postings cannot be changed." };
   }
 
   if (type === "EMAIL_CV") {
@@ -221,8 +227,18 @@ export async function updateJobStep(
   const jobPostingId = formData.get("jobPostingId") as string;
   if (!stepId || !jobPostingId) return { error: "Missing step reference." };
 
-  const step = await db.jobPostingStep.findFirst({ where: { id: stepId, jobPostingId } });
+  const step = await db.jobPostingStep.findFirst({
+    where: {
+      id: stepId,
+      jobPostingId,
+      jobPosting: { organizationId: user!.organizationId }
+    },
+    include: { jobPosting: { select: { status: true } } }
+  });
   if (!step) return { error: "This job step no longer exists." };
+  if (step.jobPosting.status !== "DRAFT") {
+    return { error: "Published job postings cannot be changed." };
+  }
 
   if (step.type === "QUESTIONNAIRE") {
     const parsed = parseQuestionnaireQuestions(formData);
@@ -272,7 +288,11 @@ export async function updateJobStep(
       return { error: "Each interviewer must be different." };
     }
     const activeInterviewers = await db.employment.findMany({
-      where: { id: { in: interviewerIds }, status: "ACTIVE" },
+      where: {
+        id: { in: interviewerIds },
+        status: "ACTIVE",
+        organizationId: user!.organizationId
+      },
       select: { id: true }
     });
     if (activeInterviewers.length !== interviewerIds.length) {
@@ -329,9 +349,15 @@ export async function deleteJobStep(formData: FormData) {
   const stepId = formData.get("stepId") as string;
   const jobPostingId = formData.get("jobPostingId") as string;
 
-  if (!stepId) return;
+  if (!stepId || !jobPostingId) return;
 
-  await db.jobPostingStep.delete({ where: { id: stepId } });
+  await db.jobPostingStep.deleteMany({
+    where: {
+      id: stepId,
+      jobPostingId,
+      jobPosting: { organizationId: user!.organizationId, status: "DRAFT" }
+    }
+  });
 
   revalidatePath(`/jobs/${jobPostingId}/application-steps`);
 }
@@ -345,13 +371,19 @@ export async function getAvailableInterviewSlots(
 ): Promise<AvailableSlotsResult> {
   const step = await db.jobPostingStep.findUnique({ where: { id: stepId } });
 
-  if (
-    !step ||
-    step.type !== "INTERVIEW" ||
-    !step.interviewerId ||
-    !step.dailyStartTime ||
-    !step.dailyEndTime
-  ) {
+  if (!step || step.type !== "INTERVIEW" || !step.dailyStartTime || !step.dailyEndTime) {
+    return { slots: [], error: "This interview step is not configured correctly." };
+  }
+
+  // Get all interviewers from config
+  const config = step.config as InterviewStepConfig | null;
+  const interviewerIds = config?.interviewerIds?.length
+    ? config.interviewerIds
+    : step.interviewerId
+      ? [step.interviewerId]
+      : [];
+
+  if (interviewerIds.length === 0) {
     return { slots: [], error: "This interview step is not configured correctly." };
   }
 
@@ -370,22 +402,36 @@ export async function getAvailableInterviewSlots(
   const dayStart = new Date(`${dateStr}T00:00:00`);
   const dayEnd = new Date(`${dateStr}T23:59:59`);
 
-  const bookings = await db.jobApplicationStepResponse.findMany({
+  // Check bookings for ALL interviewers
+  const allBookings = await db.interviewerBooking.findMany({
     where: {
-      interviewerId: step.interviewerId,
+      interviewerId: { in: interviewerIds },
       scheduledAt: { gte: dayStart, lte: dayEnd }
     },
-    select: { scheduledAt: true }
+    select: { interviewerId: true, scheduledAt: true }
   });
 
-  const bookedTimes = new Set(
-    bookings
-      .filter((b) => b.scheduledAt)
-      .map((b) => {
-        const d = b.scheduledAt as Date;
-        return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-      })
-  );
+  // Group bookings by interviewer
+  const bookingsByInterviewer = new Map<string, Set<string>>();
+  for (const id of interviewerIds) {
+    bookingsByInterviewer.set(id, new Set());
+  }
+  for (const booking of allBookings) {
+    const times = bookingsByInterviewer.get(booking.interviewerId) || new Set();
+    const timeStr = `${String(booking.scheduledAt.getHours()).padStart(2, "0")}:${String(booking.scheduledAt.getMinutes()).padStart(2, "0")}`;
+    times.add(timeStr);
+    bookingsByInterviewer.set(booking.interviewerId, times);
+  }
 
-  return { slots: allSlots.filter((slot) => !bookedTimes.has(slot)) };
+  // Find slots where ALL interviewers are available
+  const availableSlots = allSlots.filter((slot) => {
+    for (const bookedTimes of bookingsByInterviewer.values()) {
+      if (bookedTimes.has(slot)) {
+        return false;
+      }
+    }
+    return true;
+  });
+
+  return { slots: availableSlots };
 }
