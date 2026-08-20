@@ -1,4 +1,4 @@
-import type { JobStepQuestion, QuestionType } from "../../step-types";
+import type { JobStepQuestion, QuestionType } from "../../../step-types";
 
 interface QuestionEditorProps {
   question: JobStepQuestion;

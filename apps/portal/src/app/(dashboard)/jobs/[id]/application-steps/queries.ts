@@ -1,6 +1,6 @@
 import { createPrismaClient } from "@attendance/db";
 import { employmentIdentityInclude, getEmploymentName } from "../../../../../lib/employment";
-import type { InterviewStepConfig } from "../../../step-types";
+import type { InterviewStepConfig } from "../../step-types";
 
 const db = createPrismaClient(process.env.DATABASE_URL as string);
 
