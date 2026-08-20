@@ -108,7 +108,7 @@ export function JobPostingForm() {
 
         <div style={{ marginTop: "4px" }}>
           <button type="submit" className="btn-primary" disabled={isPending}>
-            {isPending ? "Publishing..." : "Publish Job Posting"}
+            {isPending ? "Adding Job Steps..." : "Add Job Steps"}
           </button>
         </div>
       </form>

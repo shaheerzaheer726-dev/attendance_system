@@ -7,6 +7,7 @@ import { isHr } from "./permissions";
 import {
   generateDaySlots,
   type EmailCvStepConfig,
+  type InterviewStepConfig,
   type QuestionnaireStepConfig,
   type JobStepQuestion
 } from "./step-types";
@@ -14,6 +15,37 @@ import {
 const db = createPrismaClient(process.env.DATABASE_URL as string);
 
 export type StepFormState = { error?: string; success?: string };
+
+function parseQuestionnaireQuestions(
+  formData: FormData
+): { questions: JobStepQuestion[] } | { error: string } {
+  const questionsRaw = formData.get("questionsJson") as string;
+
+  let questions: JobStepQuestion[];
+  try {
+    questions = JSON.parse(questionsRaw);
+  } catch {
+    return { error: "Could not read the questionnaire questions. Please try again." };
+  }
+
+  if (!Array.isArray(questions) || questions.length === 0) {
+    return { error: "Add at least one question to the questionnaire." };
+  }
+
+  for (const question of questions) {
+    if (!question.prompt || !question.prompt.trim()) {
+      return { error: "Every question needs a prompt." };
+    }
+    if (
+      question.type === "MULTIPLE_CHOICE" &&
+      (!question.options || question.options.filter((option) => option.trim()).length < 2)
+    ) {
+      return { error: `Question "${question.prompt}" needs at least two options.` };
+    }
+  }
+
+  return { questions };
+}
 
 export async function addJobStep(
   prevState: StepFormState,
@@ -35,6 +67,17 @@ export async function addJobStep(
   const job = await db.jobPosting.findUnique({ where: { id: jobPostingId } });
   if (!job) {
     return { error: "This job posting no longer exists." };
+  }
+
+  if (type === "EMAIL_CV") {
+    const existingEmailStep = await db.jobPostingStep.findFirst({
+      where: { jobPostingId, type: "EMAIL_CV" },
+      select: { id: true }
+    });
+
+    if (existingEmailStep) {
+      return { error: "Only one email CV step can be added to a job posting." };
+    }
   }
 
   const lastStep = await db.jobPostingStep.findFirst({
@@ -62,32 +105,10 @@ export async function addJobStep(
       }
     });
   } else if (type === "QUESTIONNAIRE") {
-    const questionsRaw = formData.get("questionsJson") as string;
+    const parsed = parseQuestionnaireQuestions(formData);
+    if ("error" in parsed) return parsed;
 
-    let questions: JobStepQuestion[];
-    try {
-      questions = JSON.parse(questionsRaw);
-    } catch {
-      return { error: "Could not read the questionnaire questions. Please try again." };
-    }
-
-    if (!Array.isArray(questions) || questions.length === 0) {
-      return { error: "Add at least one question to the questionnaire." };
-    }
-
-    for (const q of questions) {
-      if (!q.prompt || !q.prompt.trim()) {
-        return { error: "Every question needs a prompt." };
-      }
-      if (
-        q.type === "MULTIPLE_CHOICE" &&
-        (!q.options || q.options.filter((o) => o.trim()).length < 2)
-      ) {
-        return { error: `Question "${q.prompt}" needs at least two options.` };
-      }
-    }
-
-    const config: QuestionnaireStepConfig = { questions };
+    const config: QuestionnaireStepConfig = { questions: parsed.questions };
 
     await db.jobPostingStep.create({
       data: {
@@ -99,7 +120,16 @@ export async function addJobStep(
     });
   } else if (type === "INTERVIEW") {
     const interviewMode = formData.get("interviewMode") as string;
-    const interviewerId = formData.get("interviewerId") as string;
+    const interviewerIdsRaw = formData.get("interviewerIds") as string;
+    let interviewerIds: string[];
+    try {
+      interviewerIds = JSON.parse(interviewerIdsRaw || "[]");
+    } catch {
+      return { error: "Please choose at least one interviewer." };
+    }
+    interviewerIds = interviewerIds.filter(
+      (id): id is string => typeof id === "string" && id.length > 0
+    );
     const location = (formData.get("location") as string)?.trim();
     const availabilityStartRaw = formData.get("availabilityStart") as string;
     const availabilityEndRaw = formData.get("availabilityEnd") as string;
@@ -110,8 +140,20 @@ export async function addJobStep(
       return { error: "Please choose an interview type." };
     }
 
-    if (!interviewerId) {
-      return { error: "Please choose an interviewer." };
+    if (interviewerIds.length < 1 || interviewerIds.length > 3) {
+      return { error: "Choose between one and three interviewers." };
+    }
+
+    if (new Set(interviewerIds).size !== interviewerIds.length) {
+      return { error: "Each interviewer must be different." };
+    }
+
+    const activeInterviewers = await db.employment.findMany({
+      where: { id: { in: interviewerIds }, status: "ACTIVE" },
+      select: { id: true }
+    });
+    if (activeInterviewers.length !== interviewerIds.length) {
+      return { error: "Please choose active employees as interviewers." };
     }
 
     if (interviewMode === "PHYSICAL" && !location) {
@@ -147,7 +189,8 @@ export async function addJobStep(
         type: "INTERVIEW",
         order: nextOrder,
         interviewMode,
-        interviewerId,
+        interviewerId: interviewerIds[0],
+        config: JSON.parse(JSON.stringify({ interviewerIds } satisfies InterviewStepConfig)),
         location: interviewMode === "PHYSICAL" ? location : null,
         availabilityStart,
         availabilityEnd,
@@ -162,6 +205,118 @@ export async function addJobStep(
   revalidatePath(`/jobs/${jobPostingId}/application-steps`);
 
   return { success: "Step added." };
+}
+
+export async function updateJobStep(
+  prevState: StepFormState,
+  formData: FormData
+): Promise<StepFormState> {
+  const user = await getCurrentUser();
+
+  if (!isHr(user)) {
+    return { error: "Unauthorized: Only HR can configure job steps." };
+  }
+
+  const stepId = formData.get("stepId") as string;
+  const jobPostingId = formData.get("jobPostingId") as string;
+  if (!stepId || !jobPostingId) return { error: "Missing step reference." };
+
+  const step = await db.jobPostingStep.findFirst({ where: { id: stepId, jobPostingId } });
+  if (!step) return { error: "This job step no longer exists." };
+
+  if (step.type === "QUESTIONNAIRE") {
+    const parsed = parseQuestionnaireQuestions(formData);
+    if ("error" in parsed) return parsed;
+
+    await db.jobPostingStep.update({
+      where: { id: stepId },
+      data: { config: JSON.parse(JSON.stringify({ questions: parsed.questions })) }
+    });
+  } else if (step.type === "EMAIL_CV") {
+    const email = (formData.get("email") as string)?.trim();
+    const instructions = (formData.get("instructions") as string)?.trim();
+    if (!email || !email.includes("@")) {
+      return { error: "A valid email address is required for this step." };
+    }
+
+    const config: EmailCvStepConfig = { email, instructions: instructions || undefined };
+    await db.jobPostingStep.update({
+      where: { id: stepId },
+      data: { config: JSON.parse(JSON.stringify(config)) }
+    });
+  } else if (step.type === "INTERVIEW") {
+    const interviewMode = formData.get("interviewMode") as string;
+    const interviewerIdsRaw = formData.get("interviewerIds") as string;
+    let interviewerIds: string[];
+    try {
+      interviewerIds = JSON.parse(interviewerIdsRaw || "[]");
+    } catch {
+      return { error: "Please choose at least one interviewer." };
+    }
+    interviewerIds = interviewerIds.filter(
+      (id): id is string => typeof id === "string" && id.length > 0
+    );
+    const location = (formData.get("location") as string)?.trim();
+    const availabilityStartRaw = formData.get("availabilityStart") as string;
+    const availabilityEndRaw = formData.get("availabilityEnd") as string;
+    const dailyStartTime = formData.get("dailyStartTime") as string;
+    const dailyEndTime = formData.get("dailyEndTime") as string;
+
+    if (interviewMode !== "ONLINE" && interviewMode !== "PHYSICAL") {
+      return { error: "Please choose an interview type." };
+    }
+    if (interviewerIds.length < 1 || interviewerIds.length > 3) {
+      return { error: "Choose between one and three interviewers." };
+    }
+    if (new Set(interviewerIds).size !== interviewerIds.length) {
+      return { error: "Each interviewer must be different." };
+    }
+    const activeInterviewers = await db.employment.findMany({
+      where: { id: { in: interviewerIds }, status: "ACTIVE" },
+      select: { id: true }
+    });
+    if (activeInterviewers.length !== interviewerIds.length) {
+      return { error: "Please choose active employees as interviewers." };
+    }
+    if (interviewMode === "PHYSICAL" && !location) {
+      return { error: "Please provide a location for the physical interview." };
+    }
+    if (!availabilityStartRaw || !availabilityEndRaw) {
+      return { error: "Please choose an availability date range." };
+    }
+    if (!dailyStartTime || !dailyEndTime) {
+      return { error: "Please choose the daily interview hours." };
+    }
+
+    const availabilityStart = new Date(`${availabilityStartRaw}T00:00:00`);
+    const availabilityEnd = new Date(`${availabilityEndRaw}T23:59:59`);
+    if (availabilityEnd < availabilityStart) {
+      return { error: "The availability end date must be after the start date." };
+    }
+    if (dailyEndTime <= dailyStartTime) {
+      return { error: "Daily end time must be after the start time." };
+    }
+    if (generateDaySlots(dailyStartTime, dailyEndTime).length === 0) {
+      return { error: "The daily hours must allow at least one 30-minute slot." };
+    }
+
+    await db.jobPostingStep.update({
+      where: { id: stepId },
+      data: {
+        interviewMode,
+        interviewerId: interviewerIds[0],
+        config: JSON.parse(JSON.stringify({ interviewerIds } satisfies InterviewStepConfig)),
+        location: interviewMode === "PHYSICAL" ? location : null,
+        availabilityStart,
+        availabilityEnd,
+        dailyStartTime,
+        dailyEndTime
+      }
+    });
+  }
+
+  revalidatePath(`/jobs/${jobPostingId}/application-steps`);
+  return { success: "Questionnaire updated." };
 }
 
 export async function deleteJobStep(formData: FormData) {

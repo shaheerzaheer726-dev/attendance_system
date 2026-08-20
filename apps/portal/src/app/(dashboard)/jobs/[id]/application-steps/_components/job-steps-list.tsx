@@ -1,5 +1,15 @@
+"use client";
+
+import { useState } from "react";
 import { deleteJobStep } from "../../../steps-actions";
-import type { EmailCvStepConfig, QuestionnaireStepConfig } from "../../../step-types";
+import { EmailCvStepForm } from "../email-cv-step-form";
+import { InterviewStepForm } from "../interview-step-form";
+import { QuestionnaireStepForm } from "../questionnaire-step-form";
+import type {
+  EmailCvStepConfig,
+  InterviewStepConfig,
+  QuestionnaireStepConfig
+} from "../../../step-types";
 import type { getJobStepsData } from "../queries";
 
 type Step = NonNullable<Awaited<ReturnType<typeof getJobStepsData>>["job"]>["steps"][number];
@@ -26,7 +36,10 @@ function stepSummary(step: Step): string {
   }
   const mode =
     step.interviewMode === "ONLINE" ? "Online" : `Physical — ${step.location ?? "location TBD"}`;
-  const interviewer = step.interviewer ? `with ${step.interviewer.fullName}` : "";
+  const interviewerNames = step.interviewers?.length
+    ? step.interviewers.join(", ")
+    : step.interviewer?.fullName;
+  const interviewer = interviewerNames ? `with ${interviewerNames}` : "";
   const window =
     step.availabilityStart && step.availabilityEnd
       ? `${formatDate(step.availabilityStart)} – ${formatDate(step.availabilityEnd)}, ${step.dailyStartTime}–${step.dailyEndTime}`
@@ -34,29 +47,89 @@ function stepSummary(step: Step): string {
   return `${mode} interview ${interviewer} · ${window}`.trim();
 }
 
-export function JobStepsList({ jobId, steps }: { jobId: string; steps: Step[] }) {
+export function JobStepsList({
+  jobId,
+  steps,
+  employees
+}: {
+  jobId: string;
+  steps: Step[];
+  employees: { id: string; fullName: string }[];
+}) {
+  const [editingStepId, setEditingStepId] = useState<string | null>(null);
+
   if (!steps.length) return null;
+  const editingStep = steps.find((step) => step.id === editingStepId);
   return (
-    <section style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 24 }}>
-      {steps.map((step, index) => (
-        <article key={step.id} className="panel" style={{ cursor: "default" }}>
-          <div style={{ display: "flex", justifyContent: "space-between" }}>
-            <div>
-              <span className="status-badge">
-                Step {index + 1} · {labels[step.type]}
-              </span>
-              <p>{stepSummary(step)}</p>
+    <>
+      <section style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 24 }}>
+        {steps.map((step, index) => (
+          <article key={step.id} className="panel" style={{ cursor: "default" }}>
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <div>
+                <span className="status-badge">
+                  Step {index + 1} · {labels[step.type]}
+                </span>
+                <p>{stepSummary(step)}</p>
+              </div>
+              <div style={{ display: "flex", gap: "8px" }}>
+                <button
+                  type="button"
+                  className="back-link"
+                  onClick={() => setEditingStepId(step.id)}
+                >
+                  Edit
+                </button>
+                <form action={deleteJobStep}>
+                  <input type="hidden" name="stepId" value={step.id} />
+                  <input type="hidden" name="jobPostingId" value={jobId} />
+                  <button type="submit" className="back-link">
+                    Remove
+                  </button>
+                </form>
+              </div>
             </div>
-            <form action={deleteJobStep}>
-              <input type="hidden" name="stepId" value={step.id} />
-              <input type="hidden" name="jobPostingId" value={jobId} />
-              <button type="submit" className="danger-btn">
-                Remove
-              </button>
-            </form>
-          </div>
-        </article>
-      ))}
-    </section>
+          </article>
+        ))}
+      </section>
+      {editingStep?.type === "EMAIL_CV" && (
+        <EmailCvStepForm
+          jobPostingId={jobId}
+          stepId={editingStep.id}
+          initialConfig={editingStep.config as EmailCvStepConfig}
+          onAdded={() => setEditingStepId(null)}
+          onClose={() => setEditingStepId(null)}
+        />
+      )}
+      {editingStep?.type === "QUESTIONNAIRE" && (
+        <QuestionnaireStepForm
+          jobPostingId={jobId}
+          stepId={editingStep.id}
+          initialConfig={editingStep.config as QuestionnaireStepConfig}
+          onAdded={() => setEditingStepId(null)}
+          onClose={() => setEditingStepId(null)}
+        />
+      )}
+      {editingStep?.type === "INTERVIEW" && (
+        <InterviewStepForm
+          jobPostingId={jobId}
+          employees={employees}
+          stepId={editingStep.id}
+          initialValues={{
+            mode: editingStep.interviewMode ?? "ONLINE",
+            interviewerIds:
+              (editingStep.config as InterviewStepConfig | null)?.interviewerIds ??
+              (editingStep.interviewerId ? [editingStep.interviewerId] : []),
+            location: editingStep.location,
+            availabilityStart: editingStep.availabilityStart?.toISOString().slice(0, 10),
+            availabilityEnd: editingStep.availabilityEnd?.toISOString().slice(0, 10),
+            dailyStartTime: editingStep.dailyStartTime,
+            dailyEndTime: editingStep.dailyEndTime
+          }}
+          onAdded={() => setEditingStepId(null)}
+          onClose={() => setEditingStepId(null)}
+        />
+      )}
+    </>
   );
 }

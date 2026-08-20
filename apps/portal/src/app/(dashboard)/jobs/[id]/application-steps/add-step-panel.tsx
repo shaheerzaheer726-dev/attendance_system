@@ -9,12 +9,15 @@ type StepType = "EMAIL_CV" | "QUESTIONNAIRE" | "INTERVIEW";
 
 export function AddStepPanel({
   jobPostingId,
-  employees
+  employees,
+  steps
 }: {
   jobPostingId: string;
   employees: { id: string; fullName: string }[];
+  steps: { type: string }[];
 }) {
   const [selectedType, setSelectedType] = useState<StepType | null>(null);
+  const hasEmailStep = steps.some((step) => step.type === "EMAIL_CV");
 
   return (
     <div className="form-panel">
@@ -27,14 +30,16 @@ export function AddStepPanel({
       </div>
 
       <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-        <button
-          type="button"
-          className={selectedType === "EMAIL_CV" ? "btn-primary" : "back-link"}
-          style={{ cursor: "pointer", padding: "10px 16px" }}
-          onClick={() => setSelectedType(selectedType === "EMAIL_CV" ? null : "EMAIL_CV")}
-        >
-          + Email CV
-        </button>
+        {!hasEmailStep && (
+          <button
+            type="button"
+            className={selectedType === "EMAIL_CV" ? "btn-primary" : "back-link"}
+            style={{ cursor: "pointer", padding: "10px 16px" }}
+            onClick={() => setSelectedType(selectedType === "EMAIL_CV" ? null : "EMAIL_CV")}
+          >
+            + Email CV
+          </button>
+        )}
         <button
           type="button"
           className={selectedType === "QUESTIONNAIRE" ? "btn-primary" : "back-link"}
@@ -58,7 +63,11 @@ export function AddStepPanel({
       )}
 
       {selectedType === "QUESTIONNAIRE" && (
-        <QuestionnaireStepForm jobPostingId={jobPostingId} onAdded={() => setSelectedType(null)} />
+        <QuestionnaireStepForm
+          jobPostingId={jobPostingId}
+          onAdded={() => setSelectedType(null)}
+          onClose={() => setSelectedType(null)}
+        />
       )}
 
       {selectedType === "INTERVIEW" && (

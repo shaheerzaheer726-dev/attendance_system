@@ -38,8 +38,8 @@ export default async function JobStepsPage({ params }: { params: Promise<{ id: s
           </form>
         </div>
       </header>
-      <JobStepsList jobId={id} steps={data.job.steps} />
-      <AddStepPanel jobPostingId={id} employees={data.employees} />
+      <JobStepsList jobId={id} steps={data.job.steps} employees={data.employees} />
+      <AddStepPanel jobPostingId={id} employees={data.employees} steps={data.job.steps} />
       <div style={{ marginTop: 24 }}>
         <Link href="/jobs" className="btn-primary">
           Done — Back to Jobs

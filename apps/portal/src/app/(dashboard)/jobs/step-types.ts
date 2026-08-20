@@ -21,6 +21,10 @@ export type QuestionnaireStepConfig = {
   questions: JobStepQuestion[];
 };
 
+export type InterviewStepConfig = {
+  interviewerIds: string[];
+};
+
 export const WEEKDAYS = [1, 2, 3, 4, 5]; // Mon-Fri only, weekends are excluded from interview slots
 
 export const INTERVIEW_SLOT_MINUTES = 30;

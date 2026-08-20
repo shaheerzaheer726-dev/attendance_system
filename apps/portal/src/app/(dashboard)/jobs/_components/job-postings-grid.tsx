@@ -1,25 +1,47 @@
 import Link from "next/link";
-import { setJobPostingStatus } from "../actions";
+import { deleteJobPosting, setJobPostingStatus } from "../actions";
 import type { getJobPostings } from "../queries";
 
 type Job = Awaited<ReturnType<typeof getJobPostings>>[number];
 
 function JobActions({ job, isHr }: { job: Job; isHr: boolean }) {
+  const actionStyle = {
+    minWidth: 120,
+    height: 42,
+    alignItems: "center",
+    justifyContent: "center"
+  };
   return (
-    <div style={{ display: "flex", gap: 10, marginTop: 16, flexWrap: "wrap" }}>
-      <Link href={`/jobs/${job.id}`} className="btn-primary">
+    <div
+      style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 16, flexWrap: "wrap" }}
+    >
+      <Link href={`/jobs/${job.id}`} className="btn-primary" style={actionStyle}>
         View & Apply
       </Link>
       {isHr && (
         <>
-          <Link href={`/jobs/${job.id}/applications`} className="back-link">
+          <Link href={`/jobs/${job.id}/applications`} className="back-link" style={actionStyle}>
             Responses ({job._count.applications})
           </Link>
-          <form action={setJobPostingStatus}>
+          <form action={setJobPostingStatus} style={{ display: "flex" }}>
             <input type="hidden" name="id" value={job.id} />
             <input type="hidden" name="status" value={job.status === "OPEN" ? "CLOSED" : "OPEN"} />
-            <button type="submit" className="back-link">
+            <button type="submit" className="back-link" style={actionStyle}>
               {job.status === "OPEN" ? "Close posting" : "Reopen posting"}
+            </button>
+          </form>
+          <form action={deleteJobPosting} style={{ display: "flex" }}>
+            <input type="hidden" name="id" value={job.id} />
+            <button
+              type="submit"
+              className="back-link"
+              style={{
+                ...actionStyle,
+                color: "#f87171",
+                borderColor: "rgba(248, 113, 113, 0.4)"
+              }}
+            >
+              Delete
             </button>
           </form>
         </>

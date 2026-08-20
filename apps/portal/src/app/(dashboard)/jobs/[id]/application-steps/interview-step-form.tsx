@@ -1,179 +1,113 @@
 "use client";
 
-import { useActionState, useRef, useEffect, useState } from "react";
-import { addJobStep, type StepFormState } from "../../steps-actions";
+import { useActionState, useEffect, useState } from "react";
+import { addJobStep, updateJobStep, type StepFormState } from "../../steps-actions";
+import { InterviewFormBody } from "./_components/interview-form-body";
+import { StepEditDialog } from "./_components/step-edit-dialog";
 
 const initialState: StepFormState = {};
-
-function InterviewDetails({
-  employees,
-  mode,
-  onModeChange
-}: {
-  employees: { id: string; fullName: string }[];
-  mode: "ONLINE" | "PHYSICAL";
-  onModeChange: (mode: "ONLINE" | "PHYSICAL") => void;
-}) {
-  return (
-    <div className="form-grid">
-      <div className="form-group">
-        <label htmlFor="interviewMode">Interview Type *</label>
-        <select
-          id="interviewMode"
-          name="interviewMode"
-          className="form-control"
-          value={mode}
-          onChange={(event) => onModeChange(event.target.value as "ONLINE" | "PHYSICAL")}
-        >
-          <option value="ONLINE">Online</option>
-          <option value="PHYSICAL">Physical</option>
-        </select>
-      </div>
-      <div className="form-group">
-        <label htmlFor="interviewerId">Interviewer (Faculty) *</label>
-        <select
-          id="interviewerId"
-          name="interviewerId"
-          className="form-control"
-          defaultValue=""
-          required
-        >
-          <option value="" disabled>
-            Choose an employee
-          </option>
-          {employees.map((employee) => (
-            <option key={employee.id} value={employee.id}>
-              {employee.fullName}
-            </option>
-          ))}
-        </select>
-      </div>
-      {mode === "PHYSICAL" && (
-        <div className="form-group">
-          <label htmlFor="location">Interview Location *</label>
-          <input
-            id="location"
-            name="location"
-            className="form-control"
-            placeholder="e.g. Head Office, 3rd Floor Conference Room"
-            required
-          />
-        </div>
-      )}
-    </div>
-  );
-}
-
-function AvailabilityFields({ minimumDate }: { minimumDate: string }) {
-  return (
-    <>
-      <p className="muted">
-        Candidates will pick a 30-minute slot within the window below. Weekends are excluded
-        automatically.
-      </p>
-      <div className="form-grid">
-        <div className="form-group">
-          <label htmlFor="availabilityStart">Available From *</label>
-          <input
-            id="availabilityStart"
-            name="availabilityStart"
-            type="date"
-            className="form-control"
-            min={minimumDate}
-            required
-          />
-        </div>
-        <div className="form-group">
-          <label htmlFor="availabilityEnd">Available Until *</label>
-          <input
-            id="availabilityEnd"
-            name="availabilityEnd"
-            type="date"
-            className="form-control"
-            min={minimumDate}
-            required
-          />
-        </div>
-        <div className="form-group">
-          <label htmlFor="dailyStartTime">Daily Start Time *</label>
-          <input
-            id="dailyStartTime"
-            name="dailyStartTime"
-            type="time"
-            className="form-control"
-            defaultValue="09:00"
-            required
-          />
-        </div>
-        <div className="form-group">
-          <label htmlFor="dailyEndTime">Daily End Time *</label>
-          <input
-            id="dailyEndTime"
-            name="dailyEndTime"
-            type="time"
-            className="form-control"
-            defaultValue="17:00"
-            required
-          />
-        </div>
-      </div>
-    </>
-  );
-}
 
 export function InterviewStepForm({
   jobPostingId,
   employees,
-  onAdded
+  onAdded,
+  stepId,
+  initialValues,
+  onClose
 }: {
   jobPostingId: string;
   employees: { id: string; fullName: string }[];
   onAdded: () => void;
+  stepId?: string;
+  initialValues?: {
+    mode: "ONLINE" | "PHYSICAL";
+    interviewerIds: string[];
+    location?: string | null;
+    availabilityStart?: string;
+    availabilityEnd?: string;
+    dailyStartTime?: string | null;
+    dailyEndTime?: string | null;
+  };
+  onClose?: () => void;
 }) {
-  const [state, formAction, isPending] = useActionState(addJobStep, initialState);
-  const formRef = useRef<HTMLFormElement>(null);
-  const [mode, setMode] = useState<"ONLINE" | "PHYSICAL">("ONLINE");
+  const [state, formAction, isPending] = useActionState(
+    stepId ? updateJobStep : addJobStep,
+    initialState
+  );
+  const [mode, setMode] = useState<"ONLINE" | "PHYSICAL">(initialValues?.mode ?? "ONLINE");
+  const [interviewerIds, setInterviewerIds] = useState<string[]>(
+    initialValues?.interviewerIds.length ? initialValues.interviewerIds : [""]
+  );
+  const [availabilityStart, setAvailabilityStart] = useState(
+    initialValues?.availabilityStart ?? ""
+  );
+  const [availabilityEnd, setAvailabilityEnd] = useState(initialValues?.availabilityEnd ?? "");
 
   useEffect(() => {
     if (state.success) {
-      formRef.current?.reset();
       setMode("ONLINE");
+      setInterviewerIds([""]);
+      setAvailabilityStart("");
+      setAvailabilityEnd("");
       onAdded();
+      onClose?.();
     }
   }, [state.success]);
 
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const now = new Date();
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(
+    now.getDate()
+  ).padStart(2, "0")}`;
 
-  return (
-    <div
-      style={{
-        borderTop: "1px solid rgba(148, 163, 184, 0.2)",
-        paddingTop: "16px",
-        marginTop: "8px"
-      }}
-    >
-      {state.error && (
-        <div className="alert-error" role="alert">
-          ⚠️ {state.error}
-        </div>
-      )}
+  function handleStartChange(value: string) {
+    setAvailabilityStart(value);
+    if (availabilityEnd && availabilityEnd < value) setAvailabilityEnd("");
+  }
 
-      <form ref={formRef} action={formAction}>
-        <input type="hidden" name="jobPostingId" value={jobPostingId} />
-        <input type="hidden" name="type" value="INTERVIEW" />
+  function handleInterviewerChange(index: number, value: string) {
+    setInterviewerIds((prev) =>
+      prev.map((id, currentIndex) => (currentIndex === index ? value : id))
+    );
+  }
 
-        <InterviewDetails employees={employees} mode={mode} onModeChange={setMode} />
-        <AvailabilityFields minimumDate={todayStr} />
+  function addInterviewer() {
+    setInterviewerIds((prev) => (prev.length < 3 ? [...prev, ""] : prev));
+  }
 
-        <button
-          type="submit"
-          className="btn-primary"
-          disabled={isPending}
-          style={{ marginTop: "8px" }}
-        >
-          {isPending ? "Adding..." : "Add Step"}
-        </button>
-      </form>
-    </div>
+  function removeInterviewer(index: number) {
+    setInterviewerIds((prev) => prev.filter((_, currentIndex) => currentIndex !== index));
+  }
+
+  const form = (
+    <InterviewFormBody
+      jobPostingId={jobPostingId}
+      stepId={stepId}
+      state={state}
+      formAction={formAction}
+      isPending={isPending}
+      employees={employees}
+      mode={mode}
+      interviewerIds={interviewerIds}
+      availabilityStart={availabilityStart}
+      availabilityEnd={availabilityEnd}
+      minimumDate={todayStr}
+      location={initialValues?.location}
+      dailyStartTime={initialValues?.dailyStartTime}
+      dailyEndTime={initialValues?.dailyEndTime}
+      onModeChange={setMode}
+      onInterviewerChange={handleInterviewerChange}
+      onInterviewerAdd={addInterviewer}
+      onInterviewerRemove={removeInterviewer}
+      onStartChange={handleStartChange}
+      onEndChange={setAvailabilityEnd}
+    />
+  );
+
+  return stepId ? (
+    <StepEditDialog title="Edit Interview" onClose={onClose ?? (() => undefined)}>
+      {form}
+    </StepEditDialog>
+  ) : (
+    form
   );
 }
