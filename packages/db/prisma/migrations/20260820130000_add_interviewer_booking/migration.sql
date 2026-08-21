@@ -29,5 +29,3 @@ FROM "JobApplicationStepResponse"
 WHERE "interviewerId" IS NOT NULL AND "scheduledAt" IS NOT NULL
 ON CONFLICT ("interviewerId", "scheduledAt") DO NOTHING;
 
--- Remove the interviewerId column from JobApplicationStepResponse
-ALTER TABLE "JobApplicationStepResponse" DROP COLUMN "interviewerId";

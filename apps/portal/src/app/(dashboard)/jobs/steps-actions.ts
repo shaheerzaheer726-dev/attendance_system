@@ -127,13 +127,16 @@ export async function addJobStep(
   } else if (type === "INTERVIEW") {
     const interviewMode = formData.get("interviewMode") as string;
     const interviewerIdsRaw = formData.get("interviewerIds") as string;
-    let interviewerIds: string[];
+    let parsedInterviewerIds: unknown;
     try {
-      interviewerIds = JSON.parse(interviewerIdsRaw || "[]");
+      parsedInterviewerIds = JSON.parse(interviewerIdsRaw || "[]");
     } catch {
       return { error: "Please choose at least one interviewer." };
     }
-    interviewerIds = interviewerIds.filter(
+    if (!Array.isArray(parsedInterviewerIds)) {
+      return { error: "Please choose at least one interviewer." };
+    }
+    const interviewerIds = parsedInterviewerIds.filter(
       (id): id is string => typeof id === "string" && id.length > 0
     );
     const location = (formData.get("location") as string)?.trim();
@@ -263,13 +266,16 @@ export async function updateJobStep(
   } else if (step.type === "INTERVIEW") {
     const interviewMode = formData.get("interviewMode") as string;
     const interviewerIdsRaw = formData.get("interviewerIds") as string;
-    let interviewerIds: string[];
+    let parsedInterviewerIds: unknown;
     try {
-      interviewerIds = JSON.parse(interviewerIdsRaw || "[]");
+      parsedInterviewerIds = JSON.parse(interviewerIdsRaw || "[]");
     } catch {
       return { error: "Please choose at least one interviewer." };
     }
-    interviewerIds = interviewerIds.filter(
+    if (!Array.isArray(parsedInterviewerIds)) {
+      return { error: "Please choose at least one interviewer." };
+    }
+    const interviewerIds = parsedInterviewerIds.filter(
       (id): id is string => typeof id === "string" && id.length > 0
     );
     const location = (formData.get("location") as string)?.trim();

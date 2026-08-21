@@ -820,6 +820,10 @@ model JobApplicationStepResponse {
 
   // Interview-specific fields (only set when type = INTERVIEW)
   scheduledAt   DateTime?
+  interviewerId String? // DEPRECATED: superseded by InterviewerBooking. Do not remove until a
+                         // dedicated Contract migration is shipped separately, after the
+                         // InterviewerBooking-based rollout has been live in production and confirmed
+                         // stable. See migration 20260820130000_add_interviewer_booking.
 
   createdAt DateTime @default(now())
 
